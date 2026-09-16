@@ -8,7 +8,9 @@ import { fileURLToPath } from 'url';
 
 import { config } from './config.js';
 import { parseWorkbook } from './excelParser.js';
-import { runMockPlaywrightAutomation } from './playwright/mockAutomation.js';
+// Run automation executes tests/login.spec.ts. To go back to the old demo flow, import
+// runMockPlaywrightAutomation from './playwright/mockAutomation.js' instead (same arguments and result).
+import { runPlaywrightSpec } from './playwright/specRunner.js';
 import * as XLSX from 'xlsx';
 import type { AutomationProgressEvent, ParsedWorkbook } from './types.js';
 
@@ -132,7 +134,7 @@ app.post('/api/automation/run', async (req, res) => {
       }
 
       try {
-        const result = await runMockPlaywrightAutomation(data, jobArtifactDir, (event) => {
+        const result = await runPlaywrightSpec(data, jobArtifactDir, (event) => {
           const currentJob = jobs.get(jobId);
           if (!currentJob) return;
           currentJob.logs.push({

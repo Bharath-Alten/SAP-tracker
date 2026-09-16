@@ -17,12 +17,12 @@ const POLL_INTERVAL_MS = 1200;
 const MAX_POLL_FAILURES = 5;
 
 // User-facing automation phases. A phase is reached when a non-error log step contains one of its keywords
-// (step names come from backend/src/index.ts and backend/src/playwright/mockAutomation.ts).
+// (step names come from backend/src/index.ts and the runners in backend/src/playwright/).
 const RUN_PHASES = [
   { label: 'Prepare data', keywords: ['snapshot', 'file uploaded', 'excel data'] },
   { label: 'Read sheets', keywords: ['front page', 'grid data'] },
-  { label: 'Browser & login', keywords: ['navigation', 'credentials', 'login'] },
-  { label: 'Enter data', keywords: ['artifact', 'demo actions', 'rows added', 'created'] },
+  { label: 'Browser & login', keywords: ['navigation', 'credentials', 'login', 'test started'] },
+  { label: 'Enter data', keywords: ['artifact', 'demo actions', 'rows added', 'created', 'test finished'] },
   { label: 'Finish', keywords: [] as string[] }
 ];
 
