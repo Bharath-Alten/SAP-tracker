@@ -96,11 +96,14 @@ SAP-tracker/
 │   │   ├── excelParser.ts
 │   │   ├── index.ts
 │   │   ├── types.ts
+│   │   ├── sheetLayout.ts
 │   │   └── playwright/
-│   │       ├── mockAutomation.ts
-│   │       ├── automationFactory.ts
-│   │       └── pageObjects/
-│   │           └── cpPage.ts
+│   │       └── specRunner.ts
+│   ├── tests/
+│   │   ├── login.spec.ts        # the automation that Run automation executes
+│   │   ├── workbookData.ts      # imported workbook values for the specs
+│   │   ├── sapLogin.ts
+│   │   └── odata-discovery.spec.ts
 │   ├── uploads/
 │   ├── package.json
 │   └── tsconfig.json
@@ -111,8 +114,6 @@ SAP-tracker/
 │   ├── tsconfig.node.json
 │   ├── vite.config.ts
 │   └── index.html
-├── sample-data/
-│   └── cp-sample.csv
 ├── package.json
 ├── README.md
 └── node_modules/
@@ -156,10 +157,10 @@ Location: `backend/src/playwright/`
 This is where your automation logic sits.
 
 Main files:
-- `backend/src/playwright/mockAutomation.ts`
-- `backend/src/playwright/pageObjects/cpPage.ts`
+- `backend/tests/login.spec.ts` — the Playwright steps that Run automation executes
+- `backend/src/playwright/specRunner.ts` — starts that spec and streams its output to the UI
 
-These are the files you will update with your actual CP selectors and page actions.
+`login.spec.ts` is the file you update with your actual CP selectors and page actions.
 
 ---
 
@@ -232,17 +233,6 @@ npm run dev
 ```
 
 Open http://localhost:5173. Both the API and Vite are started by this single command.
-
----
-
-## Sample data
-
-A sample file is included here:
-
-
-- `sample-data/cp-sample.csv` (legacy sample; prefer .xlsx)
-
-Use it to validate the upload flow before working with your real CP workbook.
 
 ---
 
@@ -331,15 +321,10 @@ After the login screen works, the next steps are:
 
 ### Real selectors and page actions
 Use:
-- `backend/src/playwright/pageObjects/cpPage.ts`
+- `backend/tests/login.spec.ts`
 
-This is where you add the actual page-object logic and selectors.
-
-### Automation orchestration
-Use:
-- `backend/src/playwright/mockAutomation.ts`
-
-This is where you orchestrate the flow and emit progress events to the UI.
+This is where you add the actual selectors and page actions. Workbook values come from
+`getFormFields()` / `getGridRows()` in `backend/tests/workbookData.ts`.
 
 ### Excel parsing
 Use:

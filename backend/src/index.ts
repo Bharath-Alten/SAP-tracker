@@ -8,8 +8,7 @@ import { fileURLToPath } from 'url';
 
 import { config } from './config.js';
 import { parseWorkbook } from './excelParser.js';
-// Run automation executes tests/login.spec.ts. To go back to the old demo flow, import
-// runMockPlaywrightAutomation from './playwright/mockAutomation.js' instead (same arguments and result).
+// Run automation executes the Playwright spec tests/login.spec.ts.
 import { runPlaywrightSpec } from './playwright/specRunner.js';
 import * as XLSX from 'xlsx';
 import type { AutomationProgressEvent, ParsedWorkbook } from './types.js';
