@@ -1,5 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { getFormFields, getGridRows, requireField } from './workbookData';
+import { sapCredentials } from './sapLogin';
 
 // Picks a value in a SAP UI5 dropdown: open it, then click the matching entry.
 async function selectDropdown(page: Page, opener: Locator, value: string) {
@@ -21,12 +22,15 @@ test('test', async ({ page }) => {
   const inThreeWeeks = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000);
   const dueDate = `${inThreeWeeks.getMonth() + 1}/${inThreeWeeks.getDate()}/${String(inThreeWeeks.getFullYear()).slice(-2)}`;
 
+  // Credentials come from the SAP_USER / SAP_PASSWORD environment variables, never from the code.
+  const { user, password } = sapCredentials();
+
   await page.goto('https://mylaunchpad.intra.corp/fiori#Shell-home');
-  await page.goto('https://umssosptlspro.intra.corp/1S14/idp/SSO.saml2');
+  //await page.goto('https://umssosptlspro.intra.corp/1S14/idp/SSO.saml2');
   await page.getByRole('link', { name: 'Login / Password' }).click();
-  await page.getByRole('textbox', { name: 'Username' }).fill('vcou9wtt');
+  await page.getByRole('textbox', { name: 'Username' }).fill(user);
   await page.getByRole('textbox', { name: 'Password' }).click();
-  await page.getByRole('textbox', { name: 'Password' }).fill('Changeme2028');
+  await page.getByRole('textbox', { name: 'Password' }).fill(password);
   await page.getByRole('button', { name: 'Sign On   >' }).click();
   await page.getByRole('button', { name: 'CP Control Plan' }).click();
 

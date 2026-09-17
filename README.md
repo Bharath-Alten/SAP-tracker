@@ -304,8 +304,7 @@ Notes:
 The current automation starts with the real launchpad sign-on flow:
 
 - navigate to `https://mylaunchpad.intra.corp/fiori#Shell-home`
-- fill `#username` with `vcou9wtt`
-- fill `#password` with `Changeme2028`
+- fill the username and password from the `SAP_USER` / `SAP_PASSWORD` environment variables
 - click the Sign On button
 
 This is the first staged step of the real automation flow.

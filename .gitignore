@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+backend/dist/
+frontend/dist/
+*.tsbuildinfo
+
+# Runtime data: uploaded workbooks and per-run artifacts (business data, never commit)
+backend/uploads/
+
+# Playwright reports and artifacts
+backend/playwright-report/
+backend/test-results/
+test-results/
+
+# OData discovery output (may contain SAP data)
+backend/odata/
+
+# Secrets and local settings
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
