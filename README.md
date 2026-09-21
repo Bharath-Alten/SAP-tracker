@@ -51,6 +51,19 @@ Stop the application with `Ctrl+C` in the terminal.
 | `FRONTEND_URL` | `http://localhost:5173` | CORS origin, only relevant for `npm run dev` |
 | `CP_BASE_URL` | `https://example.com` | Target application base URL (config placeholder) |
 | `AUTOMATION_TIMEOUT_MS` | `120000` | Automation timeout setting |
+| `SAP_USER` / `SAP_PASSWORD` | – | SAP sign-on used by `tests/login.spec.ts` |
+
+### SAP credentials
+
+Copy `backend/.env.example` to `backend/.env` and fill in your own sign-on:
+
+```
+SAP_USER=your-sap-user
+SAP_PASSWORD=your-sap-password
+```
+
+`backend/.env` is git-ignored, so credentials never reach the repository. The app reads it at
+every run, so no terminal variables are needed. Real environment variables, if set, win over the file.
 
 ---
 

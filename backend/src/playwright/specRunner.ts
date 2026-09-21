@@ -18,6 +18,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendDir = path.join(__dirname, '..', '..');
 const playwrightCli = createRequire(import.meta.url).resolve('@playwright/test/cli');
 
+// Values from backend/.env (SAP_USER, SAP_PASSWORD, ...) so nobody has to set them in the terminal.
+// The file is git-ignored; see backend/.env.example. Real environment variables win over the file.
+function envFileValues(): Record<string, string> {
+  const file = path.join(backendDir, '.env');
+  if (!fs.existsSync(file)) return {};
+  const values: Record<string, string> = {};
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    if (/^\s*(#|$)/.test(line)) continue;
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (match) values[match[1]] = match[2].replace(/^["']|["']$/g, '');
+  }
+  return values;
+}
+
 function sheetRowCount(payload: ParsedWorkbook, name: string) {
   const sheet = payload.sheetNames.find((sheetName) => sheetName.trim().toLowerCase().includes(name));
   return sheet ? payload.sheets[sheet]?.length ?? 0 : 0;
@@ -42,7 +56,7 @@ export async function runPlaywrightSpec(
   const child = spawn(
     process.execPath,
     [playwrightCli, 'test', SPEC_FILE, '--reporter=list', `--output=${path.join(artifactDir, 'test-results')}`],
-    { cwd: backendDir, env: { ...process.env, WORKBOOK_DATA_PATH: dataPath, FORCE_COLOR: '0' } }
+    { cwd: backendDir, env: { ...envFileValues(), ...process.env, WORKBOOK_DATA_PATH: dataPath, FORCE_COLOR: '0' } }
   );
 
   const output: string[] = [];
