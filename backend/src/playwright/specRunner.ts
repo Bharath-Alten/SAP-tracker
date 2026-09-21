@@ -20,8 +20,10 @@ const playwrightCli = createRequire(import.meta.url).resolve('@playwright/test/c
 
 // Values from backend/.env (SAP_USER, SAP_PASSWORD, ...) so nobody has to set them in the terminal.
 // The file is git-ignored; see backend/.env.example. Real environment variables win over the file.
+const envFile = path.join(backendDir, '.env');
+
 function envFileValues(): Record<string, string> {
-  const file = path.join(backendDir, '.env');
+  const file = envFile;
   if (!fs.existsSync(file)) return {};
   const values: Record<string, string> = {};
   for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
@@ -51,12 +53,32 @@ export async function runPlaywrightSpec(
   emit({ type: 'status', step: 'Excel data read', message: `Parsed ${payload.summary.totalRows} rows across ${payload.summary.totalSheets} sheets.` });
   emit({ type: 'status', step: 'CP Front Page data loaded', message: `Loaded ${sheetRowCount(payload, 'front page')} rows from CP Front Page.` });
   emit({ type: 'status', step: 'CP Grid data loaded', message: `Loaded ${sheetRowCount(payload, 'grid')} rows from CP Grid.` });
+  // Say where the SAP credentials come from, so a missing or misplaced .env is obvious in the run panel.
+  const fromFile = envFileValues();
+  const specEnv: NodeJS.ProcessEnv = { ...fromFile, ...process.env, WORKBOOK_DATA_PATH: dataPath, FORCE_COLOR: '0' };
+  const missing = ['SAP_USER', 'SAP_PASSWORD'].filter((name) => !specEnv[name]);
+  if (missing.length) {
+    emit({
+      type: 'error',
+      step: 'Credentials missing',
+      message: fs.existsSync(envFile)
+        ? `${missing.join(' and ')} not found in ${envFile}. Check the spelling of the variable names.`
+        : `${missing.join(' and ')} not set, and no file at ${envFile}. Copy backend/.env.example to backend/.env and fill it in.`
+    });
+  } else {
+    emit({
+      type: 'status',
+      step: 'Credentials loaded',
+      message: process.env.SAP_USER ? 'Using SAP_USER from the environment.' : `Using SAP_USER from ${envFile}.`
+    });
+  }
+
   emit({ type: 'status', step: 'Playwright test started', message: `Running ${SPEC_FILE}` });
 
   const child = spawn(
     process.execPath,
     [playwrightCli, 'test', SPEC_FILE, '--reporter=list', `--output=${path.join(artifactDir, 'test-results')}`],
-    { cwd: backendDir, env: { ...envFileValues(), ...process.env, WORKBOOK_DATA_PATH: dataPath, FORCE_COLOR: '0' } }
+    { cwd: backendDir, env: specEnv }
   );
 
   const output: string[] = [];
