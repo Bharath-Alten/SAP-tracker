@@ -87,7 +87,9 @@ export async function runPlaywrightSpec(
       const text = line.trim();
       if (!text) continue;
       output.push(text);
-      emit({ type: /\berror\b|\bfailed\b|✘/i.test(text) ? 'error' : 'log', step: 'Playwright', message: text });
+      // "0 failed" and "0 errors" are good news, so don't mark those lines as errors.
+      const bad = /\berror\b|\bfailed\b|✘/i.test(text) && !/\b0 (failed|errors?)\b/i.test(text);
+      emit({ type: bad ? 'error' : 'log', step: 'Playwright', message: text });
     }
   };
   child.stdout.on('data', onData);
