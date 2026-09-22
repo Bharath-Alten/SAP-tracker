@@ -29,6 +29,9 @@ async function selectDropdown(page: Page, opener: Locator, value: string) {
 
 
 test('test', async ({ page }) => {
+  // The SAP screens plus the grid rows take longer than Playwright's default 30s.
+  test.setTimeout(300_000);
+
   const form = getFormFields();
 
   // Values derived from the workbook fields
