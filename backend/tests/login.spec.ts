@@ -2,29 +2,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import { getFormFields, getGridRows, requireField } from './workbookData';
 import { sapCredentials } from './sapLogin';
 
-// Picks a value in a SAP UI5 dropdown: open it, then click the matching entry.
-// async function selectDropdown(page: Page, opener: Locator, value: string) {
-//   await opener.click();
-//   const option = page.getByRole('option', { name: value, exact: true });
-//   if (await option.count()) await option.first().click();
-//   else await page.locator('li').filter({ hasText: value }).first().click();
-// }
-// Picks a value in a SAP UI5 dropdown: open it, then click the matching entry.
-// Picks a value in a SAP UI5 dropdown: open it, wait for it, then click the matching entry.
 
-
-// async function selectDropdown(page: Page, opener: Locator, value: string) {
-//   await opener.click({ force: true });
-  
-//   // Wait for the dropdown option to physically appear on the screen
-//   const option = page.locator('li').filter({ hasText: value }).first();
-//   await option.waitFor({ state: 'visible', timeout: 5000 });
-//   await option.click({ force: true });
-  
-//   // Give SAP UI5 a half-second to register the selection before moving to the next field
-//   await page.waitForTimeout(500); 
-// }
-// Picks a value in a SAP UI5 dropdown: open it, wait for it, then click the matching entry.
 async function selectDropdown(page: Page, opener: Locator, value: string) {
   await opener.click({ force: true });
   
@@ -47,17 +25,7 @@ async function selectDropdown(page: Page, opener: Locator, value: string) {
   await page.waitForTimeout(500); 
 }
 
-// async function selectDropdown(page: Page, opener: Locator, value: string) {
-//   // Add { force: true } to bypass the SAP label intercepting the click
-//   await opener.click({ force: true });
-  
-//   const option = page.getByRole('option', { name: value, exact: true });
-//   if (await option.count()) {
-//       await option.first().click({ force: true });
-//   } else {
-//       await page.locator('li').filter({ hasText: value }).first().click({ force: true });
-//   }
-// }
+
 
 test('test', async ({ page }) => {
   const form = getFormFields();
@@ -69,8 +37,7 @@ test('test', async ({ page }) => {
   const standard = (form['Program designation'] ?? '').match(/\(([^)]+)\)/)?.[1] ?? '';           // "ST08"
   const poeNumber = (form['Point of Embodiment'] ?? '').replace(/\D/g, '');                      // "13441"
   const inThreeWeeks = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000);
-  const dueDate = `${inThreeWeeks.getMonth() + 1}/${inThreeWeeks.getDate()}/${String(inThreeWeeks.getFullYear()).slice(-2)}`;
-
+  const dueDate = `${String(inThreeWeeks.getDate()).padStart(2, '0')}.${String(inThreeWeeks.getMonth() + 1).padStart(2, '0')}.${inThreeWeeks.getFullYear()}`;
   // Credentials come from the SAP_USER / SAP_PASSWORD environment variables, never from the code.
   const { user, password } = sapCredentials();
 
@@ -87,12 +54,7 @@ test('test', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Control Plan Name' }).fill(requireField('Control Plan Number'));
   await page.getByRole('textbox', { name: 'Control Plan Description' }).click();
   await page.getByRole('textbox', { name: 'Control Plan Description' }).fill(form['Control Plan Number']);
-  // console.log("till here done ");
-  // await selectDropdown(page, page.getByRole('combobox', { name: 'SAP Target System' }), 'ARP');
-  // await selectDropdown(page, page.getByRole('combobox', { name: 'Control Plan Granularity' }), 'Routing');
-  // await selectDropdown(page, page.getByRole('combobox', { name: 'Control Plan Stage /' }), form['Stage']);
-  // await selectDropdown(page, page.getByRole('combobox', { name: 'Program' }), 'A320_Family_CEO/NEO');
-  // console.log("---------- ");
+
 
   console.log("till here done ");
   
@@ -101,11 +63,6 @@ test('test', async ({ page }) => {
   await selectDropdown(page, page.getByRole('combobox', { name: /Control Plan Granularity/i }), 'Routing');
 
   await selectDropdown(page, page.getByRole('combobox', { name: /Control Plan Stage/i }), form['Stage']);
-  // Using getByRole for Plant instead of the hardcoded xmlview ID
-  // await selectDropdown(page, page.getByRole('combobox', { name: 'Plant', exact: true }), 'AFM1');
-    console.log("---------- ");
-  // await selectDropdown(page, page.getByRole('combobox', { name: /Plant/i }), 'AFM1');
-  // Using the wildcard ID to click the dropdown arrow directly
 await selectDropdown(page, page.locator('[id$="id_plant-arrow"]'), 'AFM1');
   await selectDropdown(page, page.getByRole('combobox', { name: /Program/i }), 'A320_Family_CEO/NEO');
  console.log("----------1 ");
@@ -150,6 +107,8 @@ console.log("----------4 ");
   await page.getByRole('textbox', { name: 'Due Date for Implementation' }).click();
   await page.getByRole('textbox', { name: 'Due Date for Implementation' }).fill(dueDate);
   await page.getByRole('textbox', { name: 'Creation Date' }).click();
-
-  await page.goto('https://mylaunchpad.intra.corp/fiori#ZSO_1N31_CP-display&/CP_ID/A0/CPGrid');
+  console.log("---------- Clicking Save");
+  await page.locator("//bdi[.='Save']").click();
+  await page.waitForTimeout(2000);
+  //await page.goto('https://mylaunchpad.intra.corp/fiori#ZSO_1N31_CP-display&/CP_ID/A0/CPGrid');
 });
