@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { getFormFields, getGridRows, requireField } from './workbookData';
 import { sapCredentials } from './sapLogin';
+import { addGridRows } from './gridRows';
 
 
 async function selectDropdown(page: Page, opener: Locator, value: string) {
@@ -110,5 +111,9 @@ console.log("----------4 ");
   console.log("---------- Clicking Save");
   await page.locator("//bdi[.='Save']").click();
   await page.waitForTimeout(2000);
+
+  // Grid rows go to SAP through its own OData service. Sends one row by default;
+  // set GRID_ROWS=all once that row is accepted. Remove this line to get the old behaviour back.
+  await addGridRows(page, getGridRows(), { product: productNumber });
   //await page.goto('https://mylaunchpad.intra.corp/fiori#ZSO_1N31_CP-display&/CP_ID/A0/CPGrid');
 });
