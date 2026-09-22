@@ -2,7 +2,8 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  timeout: 30_000,
+  // The SAP screens plus the grid rows need more than the 30s default.
+  timeout: 180_000,
   retries: 0,
   reporter: [
     ['list'],
@@ -10,6 +11,9 @@ export default defineConfig({
   ],
   use: {
     headless: false,
+    // The corporate HTTPS certificate is not in Node's trust store, so direct API
+    // calls (page.request) fail with "self-signed certificate in certificate chain".
+    ignoreHTTPSErrors: true,
     viewport: { width: 1280, height: 800 },
     actionTimeout: 0,
     trace: 'retain-on-failure',

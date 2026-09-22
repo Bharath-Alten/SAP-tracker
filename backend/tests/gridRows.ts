@@ -74,13 +74,18 @@ const EMPTY_ROW: Record<string, string> = {
 
 const CP_ID_PATTERN = /[A-Z0-9]{2,6}_[A-Z]_\d{4}_\d{3,5}/;
 
-/** The control plan SAP just created: from CP_ID, else the page URL, else the page text. */
-export async function findControlPlanId(page: Page, fallback = '') {
-  if (process.env.CP_ID) return process.env.CP_ID;
+/**
+ * The control plan SAP just created: from CP_ID, else the page URL, else the page text.
+ * Never falls back to the id in the workbook — that is a different, existing plan, and
+ * writing rows into it would corrupt real data.
+ */
+export async function findControlPlanId(page: Page) {
+  if (process.env.CP_ID) return { id: process.env.CP_ID, source: 'the CP_ID variable' };
   const fromUrl = decodeURIComponent(page.url()).match(CP_ID_PATTERN)?.[0];
-  if (fromUrl) return fromUrl;
+  if (fromUrl) return { id: fromUrl, source: 'the page URL' };
   const fromPage = (await page.content()).match(CP_ID_PATTERN)?.[0];
-  return fromPage ?? fallback;
+  if (fromPage) return { id: fromPage, source: 'the saved page' };
+  return { id: '', source: 'nowhere' };
 }
 
 async function csrfToken(page: Page) {
@@ -114,13 +119,19 @@ export async function addGridRows(
     return { sent: 0, failed: 0 };
   }
 
-  const cpId = await findControlPlanId(page, rows[0]['Control plan ID'] ?? '');
+  const { id: cpId, source } = await findControlPlanId(page);
   const issue = process.env.CP_ISSUE ?? options.issue ?? rows[0]['Issue'] ?? 'A0';
-  if (!cpId) throw new Error('Could not work out the control plan id after saving. Set CP_ID to run this step.');
+  if (!cpId) {
+    throw new Error(
+      'Could not find the control plan id SAP created after Save (it was not in the page or its URL). ' +
+      'Set CP_ID to the new plan id to send the rows, e.g. CP_ID=AFM1_D_2026_0393.'
+    );
+  }
 
   const all = process.env.GRID_ROWS === 'all';
   const toSend = all ? rows : rows.slice(0, 1);
-  console.log(`GRID: sending ${toSend.length} of ${rows.length} row(s) to CPID='${cpId}' Issue='${issue}'${all ? '' : " (set GRID_ROWS=all for every row)"}`);
+  console.log(`GRID: CPID='${cpId}' Issue='${issue}' (taken from ${source})`);
+  console.log(`GRID: sending ${toSend.length} of ${rows.length} row(s)${all ? '' : " (set GRID_ROWS=all for every row)"}`);
 
   const token = await csrfToken(page);
   let sent = 0;
