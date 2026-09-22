@@ -113,7 +113,8 @@ console.log("----------4 ");
   await page.getByRole('textbox', { name: 'Creation Date' }).click();
   console.log("---------- Clicking Save");
   await page.locator("//bdi[.='Save']").click();
-  await page.waitForTimeout(2000);
+  // SAP needs a while to create the plan and show its new id.
+  await page.waitForTimeout(20000);
 
   // Grid rows go to SAP through its own OData service. Sends one row by default;
   // set GRID_ROWS=all once that row is accepted. Remove this line to get the old behaviour back.
