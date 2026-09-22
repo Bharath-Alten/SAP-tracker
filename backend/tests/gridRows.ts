@@ -152,7 +152,13 @@ export async function addGridRows(
 
     if (response.ok()) {
       sent += 1;
-      console.log(`GRID OK   ${label} -> HTTP ${response.status()}`);
+      // Echo the keys SAP actually stored: if CPID/Issue come back empty or different,
+      // the row was filed somewhere else and will not show in the plan.
+      const created = await response.json().then((body) => body?.d ?? {}).catch(() => ({}));
+      const keys = ['CPID', 'Issue', 'ControlID', 'Counter', 'Plant', 'Name']
+        .map((field) => `${field}='${created[field] ?? ''}'`)
+        .join(' ');
+      console.log(`GRID OK   ${label} -> HTTP ${response.status()} | stored as ${keys}`);
     } else {
       failed += 1;
       // SAP explains exactly what it disliked; print it so the run panel shows the reason.
@@ -160,6 +166,45 @@ export async function addGridRows(
       console.log(`GRID FAIL ${label} -> HTTP ${response.status()}: ${text}`);
       break;
     }
+  }
+
+  // The CP screen follows its row POSTs with this header update, so do the same.
+  if (sent) {
+    const merge = await page.request.fetch(
+      `${ODATA_SERVICE}/ETCPHeaderInfoSet(CPID='${cpId}',Issue='${issue}')?sap-client=${SAP_CLIENT}`,
+      {
+        method: 'MERGE',
+        headers: {
+          'X-CSRF-Token': token,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          DataServiceVersion: '2.0',
+          MaxDataServiceVersion: '2.0'
+        },
+        data: {
+          __metadata: {
+            uri: `${ODATA_SERVICE}/ETCPHeaderInfoSet(CPID='${cpId}',Issue='${issue}')`,
+            type: 'Z_1N31_CP_SRV.ETCPHeaderInfo'
+          },
+          Mode: 'U'
+        }
+      }
+    );
+    console.log(`GRID: header update -> HTTP ${merge.status()}${merge.ok() ? '' : `: ${(await merge.text()).replace(/\s+/g, ' ').slice(0, 300)}`}`);
+  }
+
+  // Ask SAP what the plan now contains, the same query the CP screen uses.
+  const filter = encodeURIComponent(`CPID eq '${cpId}' and Issue eq '${issue}'`);
+  const check = await page.request.get(
+    `${ODATA_SERVICE}/ETCPIRControlsSet?sap-client=${SAP_CLIENT}&$filter=${filter}&$inlinecount=allpages&$top=5`,
+    { headers: { Accept: 'application/json' } }
+  );
+  if (check.ok()) {
+    const body = await check.json().catch(() => ({}));
+    const results = body?.d?.results ?? [];
+    console.log(`GRID: SAP reports ${body?.d?.__count ?? results.length} row(s) in ${cpId}/${issue}. First: ${results[0]?.Name ?? '(none)'}`);
+  } else {
+    console.log(`GRID: could not read the rows back -> HTTP ${check.status()}`);
   }
 
   console.log(`GRID: ${sent} sent, ${failed} failed.`);
