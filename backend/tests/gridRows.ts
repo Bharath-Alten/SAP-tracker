@@ -2,54 +2,61 @@ import type { Page } from '@playwright/test';
 
 import { ODATA_SERVICE, SAP_CLIENT } from './sapLogin';
 
-// Sends the CP Grid rows to SAP through the OData service the CP screen itself uses
-// (POST ETCPIRControlsSet), reusing the session Playwright already signed in with.
+// Sends CP Grid rows to SAP the same way the CP screen does: one $batch per row, holding a
+// changeset with (1) POST ETCPIRControlsSet with an EMPTY key and (2) MERGE on the plan header.
+// That changeset is what attaches the row to the plan - a plain POST with CPID filled in is
+// accepted by SAP but never shows up in the grid.
 //
-// By default only the FIRST row is sent, and SAP's answer is printed. Once that works,
-// set GRID_ROWS=all to send every row.
+// Only the FIRST row is sent unless GRID_ROWS=all.
 
-// SAP field -> CP Grid column. Left side comes from the captured POST payload,
-// right side from the workbook. Add or correct pairs here as we learn the screen.
+// SAP text field -> CP Grid column.
 const GRID_MAP: Record<string, string> = {
   Name: 'Control name',
   Description: 'Activity Description',
+  BuildProcessStepNo: 'Operation Number',
   BPSN: 'Process Step',
   OperationName: 'Operation Description',
   MachineToolingJig: 'Machinery (Tools, Device, Jigs, Equipmen',
   ReferenceMethod: 'Control Method',
+  Mandatory: 'Mandatory',
+  ProductProcessName: 'Characteristic designation',
+  ProductProcessNo: 'Characteristic number',
+  ProductProcessSourceRef: 'Characteristic Source Reference',
   AcceptCriteria: 'Acceptance criteria',
   ControlTarget: 'Nominal Value',
   ControlLower: 'Lower limit',
   ControlUpper: 'Upper limit',
   UnitMeasure: 'Unit of Measure',
   ControlDevice: 'Measurement System / Device',
-  ControlActor: 'Actor',
+  ControlActor: 'Minimal Delegation Required',
+  Actor: 'Actor',
   MeasurePoints: 'Number of Points',
   ControlFreq: 'Sample Frequency',
   SampleSize: 'Sample size',
   ControlReduction: 'Justification for Control Reduction',
   ControlRemoval: 'Justification for Control Removal',
   ReactionPlan: 'Reaction plan',
-  MeDossier: 'ME Dossier',
-  RecordingCheck: 'Record Keeping Means / Data Charts',
-  Mandatory: 'Mandatory',
-  Criticality: 'Classification',
-  ControlType: 'Control Type',
-  SubControlTypeDesc: 'Control Subtype',
-  ProductProcess: 'Product or Process',
-  ProductProcessName: 'Characteristic designation',
-  ProductProcessNo: 'Characteristic number',
-  ProductProcessSourceRef: 'Characteristic Source Reference',
+  Ratio: 'Ratio',
   ParaDesc: 'Parameter Designation',
   ParaCode: 'Parameter Number',
-  Ratio: 'Ratio',
-  MPDefDesc: 'Measurement Points Definition',
-  RecordSerialNumText: 'Record Metrological Serial Number',
-  OperationStep: 'Operation process step'
+  RecordSerialNumText: 'Record Metrological Serial Number'
 };
 
-// Every field the SAP screen sends, so the body has the same shape. Values are filled from
-// GRID_MAP; the rest stay empty, exactly as the captured request had them.
+// SAP stores several fields as a code, not as the text in the workbook. Codes seen in the
+// screen's own requests; unknown values fall back to the text and are reported in the log.
+const CODES: Record<string, { column: string; codes: Record<string, string> }> = {
+  ProductProcessKey: { column: 'Product or Process', codes: { Product: '1', Process: '2' } },
+  CriticalityKey: { column: 'Classification', codes: { 'Safety Critical': 'Y' } },
+  ControlTypeKey: { column: 'Control Type', codes: { Qualitative: 'L', Quantitative: 'V' } },
+  SubControlType: { column: 'Control Subtype', codes: { Basic: 'BAS' } },
+  MPDefinition: { column: 'Measurement Points Definition', codes: { 'Qualitative Mandatory': 'LM' } },
+  OperationStepKey: { column: 'Operation process step', codes: { 'In-process': 'P', 'End of process': 'E' } },
+  ControlActorKey: { column: 'Minimal Delegation Required', codes: { L1: 'ACTR_001', L2: 'ACTR_002' } },
+  MeDossierKey: { column: 'ME Dossier', codes: { ROUTING: 'DOSS_02N' } },
+  RecordingCheckKey: { column: 'Execution system', codes: { QDC_SAP: 'QDC_SAP' } }
+};
+
+// Same shape as the screen's payload: keys empty, the row belongs to the plan through the changeset.
 const EMPTY_ROW: Record<string, string> = {
   CPID: '', Issue: '', Plant: '', ControlID: '', Counter: '', ReferenceID: '', RefIDFilter: '',
   Name: '', IRDescription: '', Description: '', BuildProcessStepNo: '', BPSN: '', OperationNameKey: '',
@@ -62,22 +69,22 @@ const EMPTY_ROW: Record<string, string> = {
   ControlUpperInt: '0.00', UnitMeasure: '', ControlDeviceKey: '', ControlDevice: '', RecordSerialNumber: '',
   ControlActorKey: '', ControlActor: '', MeasurePoints: '', ControlFreq: '', SampleSize: '', SpcFollowup: '',
   ControlReduction: '', ControlRemoval: '', InspectionPlan: '', ReactionPlan: '', MeDossierKey: '',
-  MeDossier: '', RecordingCheck: '', Assign: 'C', DeleteInd: '', KCnT: '', QCRStatus: '', STOIDRef: '',
-  Effectivity: '', Standard: '', DSDrawing: '', ToleranceID: '', TargetMax: '', TargetMin: '',
-  FirstOfGroup: '', DraftCtrDBKey: '', AssignedQCProducts: '', ControlFlow: '', DrillState: '', HLevel: '',
-  PNode: '', UnAssign: '', Node: '', TotalIR: '', TotalQC: '', TotalKCnTQC: '', RecordSerialNumText: '',
-  ProgramKey: '', ProgramDesc: '', EnableUoM: '', WorkingLanguage: 'EN', SubConTypeCodeGrp: '',
-  SubConTypeCatalog: '', Ratio: '', MPDefinition: '', MPDefDesc: '', ParaCode: '', CPGridComment: '',
-  ParaCatalog: '', ParaCodeGrp: '', OperationStepKey: '', OperationStep: '', Actor: '', ParaDesc: '',
-  MandatoryDesc: ''
+  MeDossier: '', RecordingCheckKey: '', RecordingCheck: '', Assign: 'C', DeleteInd: '', KCnT: '',
+  QCRStatus: '', STOIDRef: '', Effectivity: '', Standard: '', DSDrawing: '', ToleranceID: '',
+  TargetMax: '', TargetMin: '', FirstOfGroup: '', DraftCtrDBKey: '', AssignedQCProducts: '',
+  ControlFlow: '', DrillState: '', HLevel: '', PNode: '', UnAssign: '', Node: '', TotalIR: '',
+  TotalQC: '', TotalKCnTQC: '', RecordSerialNumText: '', ProgramKey: '', ProgramDesc: '', EnableUoM: '',
+  WorkingLanguage: 'EN', SubConTypeCodeGrp: '', SubConTypeCatalog: '1', Ratio: '', MPDefinition: '',
+  MPDefDesc: '', ParaCode: '', CPGridComment: '', ParaCatalog: '', ParaCodeGrp: '', OperationStepKey: '',
+  OperationStep: '', Actor: '', ParaDesc: '', MandatoryDesc: ''
 };
 
 const CP_ID_PATTERN = /[A-Z0-9]{2,6}_[A-Z]_\d{4}_\d{3,5}/;
+const CRLF = '\r\n';
 
 /**
  * The control plan SAP just created: from CP_ID, else the page URL, else the page text.
- * Never falls back to the id in the workbook — that is a different, existing plan, and
- * writing rows into it would corrupt real data.
+ * Never falls back to the id in the workbook - that is a different, existing plan.
  */
 export async function findControlPlanId(page: Page) {
   if (process.env.CP_ID) return { id: process.env.CP_ID, source: 'the CP_ID variable' };
@@ -97,14 +104,85 @@ async function csrfToken(page: Page) {
   return token;
 }
 
-function bodyForRow(row: Record<string, string>, cpId: string, issue: string, product: string) {
-  const body: Record<string, unknown> = { ...EMPTY_ROW, CPID: cpId, Issue: issue, AssignedQCProducts: product };
-  for (const [sapField, column] of Object.entries(GRID_MAP)) {
-    const value = (row[column] ?? '').trim();
-    if (value && value !== '-') body[sapField] = value;
+export function rowBody(row: Record<string, string>, unknownCodes: string[]) {
+  const body: Record<string, unknown> = { ...EMPTY_ROW };
+  const value = (column: string) => (row[column] ?? '').trim();
+
+  for (const [field, column] of Object.entries(GRID_MAP)) {
+    if (value(column)) body[field] = value(column);
   }
+  for (const [field, { column, codes }] of Object.entries(CODES)) {
+    const text = value(column);
+    if (!text) continue;
+    const code = codes[text];
+    if (code) body[field] = code;
+    else {
+      body[field] = text;
+      unknownCodes.push(`${field}: no code known for "${text}" (${column})`);
+    }
+  }
+  // Subtype travels as both the code and its code group, as the screen sends it.
+  if (body.SubControlType) body.SubConTypeCodeGrp = body.SubControlType;
   body.__metadata = { type: 'Z_1N31_CP_SRV.ETCPIRControls' };
   return body;
+}
+
+// One $batch holding one changeset: create the row, then touch the header, exactly like the screen.
+export function batchBody(row: Record<string, unknown>, cpId: string, issue: string, token: string, boundary: string, changeset: string) {
+  const headerUri = `${ODATA_SERVICE}/ETCPHeaderInfoSet(CPID='${cpId}',Issue='${issue}')`;
+  const rowJson = JSON.stringify(row);
+  const headerJson = JSON.stringify({
+    __metadata: { uri: headerUri, type: 'Z_1N31_CP_SRV.ETCPHeaderInfo' },
+    Mode: 'U'
+  });
+  const common = [
+    'sap-contextid-accept: header',
+    'Accept: application/json',
+    'Accept-Language: en',
+    'DataServiceVersion: 2.0',
+    'MaxDataServiceVersion: 2.0',
+    `x-csrf-token: ${token}`,
+    'Content-Type: application/json'
+  ];
+
+  return [
+    `--${boundary}`,
+    `Content-Type: multipart/mixed; boundary=${changeset}`,
+    '',
+    `--${changeset}`,
+    'Content-Type: application/http',
+    'Content-Transfer-Encoding: binary',
+    '',
+    `POST ETCPIRControlsSet?sap-client=${SAP_CLIENT} HTTP/1.1`,
+    ...common,
+    `Content-Length: ${Buffer.byteLength(rowJson)}`,
+    '',
+    rowJson,
+    `--${changeset}`,
+    'Content-Type: application/http',
+    'Content-Transfer-Encoding: binary',
+    '',
+    `MERGE ETCPHeaderInfoSet(CPID='${cpId}',Issue='${issue}')?sap-client=${SAP_CLIENT} HTTP/1.1`,
+    ...common,
+    `Content-Length: ${Buffer.byteLength(headerJson)}`,
+    '',
+    headerJson,
+    `--${changeset}--`,
+    '',
+    `--${boundary}--`,
+    ''
+  ].join(CRLF);
+}
+
+// A $batch always answers 202; the real outcome is in the parts.
+function batchOutcome(text: string) {
+  const statuses = [...text.matchAll(/HTTP\/1\.1 (\d{3})/g)].map((match) => Number(match[1]));
+  const failedStatus = statuses.find((status) => status >= 400);
+  if (!failedStatus) return { ok: true, detail: statuses.join(', ') };
+  const message = text.match(/"message"\s*:\s*\{[^}]*"value"\s*:\s*"([^"]+)"/)?.[1]
+    ?? text.match(/<message[^>]*>([^<]+)</)?.[1]
+    ?? text.replace(/\s+/g, ' ').slice(0, 400);
+  return { ok: false, detail: `HTTP ${failedStatus}: ${message}` };
 }
 
 export type GridResult = { sent: number; failed: number };
@@ -131,69 +209,45 @@ export async function addGridRows(
   const all = process.env.GRID_ROWS === 'all';
   const toSend = all ? rows : rows.slice(0, 1);
   console.log(`GRID: CPID='${cpId}' Issue='${issue}' (taken from ${source})`);
-  console.log(`GRID: sending ${toSend.length} of ${rows.length} row(s)${all ? '' : " (set GRID_ROWS=all for every row)"}`);
+  console.log(`GRID: sending ${toSend.length} of ${rows.length} row(s)${all ? '' : ' (set GRID_ROWS=all for every row)'}`);
 
   const token = await csrfToken(page);
+  const unknownCodes: string[] = [];
   let sent = 0;
   let failed = 0;
 
   for (const [index, row] of toSend.entries()) {
     const label = `row ${index + 1}/${toSend.length} (${row['Control name'] || row['Control ID'] || 'unnamed'})`;
-    const response = await page.request.post(`${ODATA_SERVICE}/ETCPIRControlsSet?sap-client=${SAP_CLIENT}`, {
+    const stamp = `${Date.now()}-${index}`;
+    const boundary = `batch_${stamp}`;
+    const changeset = `changeset_${stamp}`;
+    const body = batchBody(rowBody(row, unknownCodes), cpId, issue, token, boundary, changeset);
+
+    const response = await page.request.post(`${ODATA_SERVICE}/$batch?sap-client=${SAP_CLIENT}`, {
       headers: {
         'X-CSRF-Token': token,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
+        'Content-Type': `multipart/mixed;boundary=${boundary}`,
+        Accept: 'multipart/mixed',
         DataServiceVersion: '2.0',
         MaxDataServiceVersion: '2.0'
       },
-      data: bodyForRow(row, cpId, issue, options.product ?? '')
+      data: body
     });
 
-    if (response.ok()) {
+    const outcome = batchOutcome(await response.text());
+    if (response.ok() && outcome.ok) {
       sent += 1;
-      // Echo the keys SAP actually stored: if CPID/Issue come back empty or different,
-      // the row was filed somewhere else and will not show in the plan.
-      const created = await response.json().then((body) => body?.d ?? {}).catch(() => ({}));
-      const keys = ['CPID', 'Issue', 'ControlID', 'Counter', 'Plant', 'Name']
-        .map((field) => `${field}='${created[field] ?? ''}'`)
-        .join(' ');
-      console.log(`GRID OK   ${label} -> HTTP ${response.status()} | stored as ${keys}`);
+      console.log(`GRID OK   ${label}`);
     } else {
       failed += 1;
-      // SAP explains exactly what it disliked; print it so the run panel shows the reason.
-      const text = (await response.text()).replace(/\s+/g, ' ').slice(0, 600);
-      console.log(`GRID FAIL ${label} -> HTTP ${response.status()}: ${text}`);
+      console.log(`GRID FAIL ${label} -> ${outcome.detail}`);
       break;
     }
   }
 
-  // The CP screen follows its row POSTs with this header update, so do the same.
-  if (sent) {
-    const merge = await page.request.fetch(
-      `${ODATA_SERVICE}/ETCPHeaderInfoSet(CPID='${cpId}',Issue='${issue}')?sap-client=${SAP_CLIENT}`,
-      {
-        method: 'MERGE',
-        headers: {
-          'X-CSRF-Token': token,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          DataServiceVersion: '2.0',
-          MaxDataServiceVersion: '2.0'
-        },
-        data: {
-          __metadata: {
-            uri: `${ODATA_SERVICE}/ETCPHeaderInfoSet(CPID='${cpId}',Issue='${issue}')`,
-            type: 'Z_1N31_CP_SRV.ETCPHeaderInfo'
-          },
-          Mode: 'U'
-        }
-      }
-    );
-    console.log(`GRID: header update -> HTTP ${merge.status()}${merge.ok() ? '' : `: ${(await merge.text()).replace(/\s+/g, ' ').slice(0, 300)}`}`);
-  }
+  for (const note of [...new Set(unknownCodes)]) console.log(`GRID NOTE ${note}`);
 
-  // Ask SAP what the plan now contains, the same query the CP screen uses.
+  // Read the plan back with the screen's own query, so the count is SAP's answer, not ours.
   const filter = encodeURIComponent(`CPID eq '${cpId}' and Issue eq '${issue}'`);
   const check = await page.request.get(
     `${ODATA_SERVICE}/ETCPIRControlsSet?sap-client=${SAP_CLIENT}&$filter=${filter}&$inlinecount=allpages&$top=5`,
