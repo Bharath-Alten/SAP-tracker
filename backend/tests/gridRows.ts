@@ -190,14 +190,17 @@ export type GridResult = { sent: number; failed: number };
 export async function addGridRows(
   page: Page,
   rows: Record<string, string>[],
-  options: { product?: string; issue?: string } = {}
+  options: { product?: string; issue?: string; cpId?: string } = {}
 ): Promise<GridResult> {
   if (!rows.length) {
     console.log('GRID: the workbook has no grid rows, nothing to send.');
     return { sent: 0, failed: 0 };
   }
 
-  const { id: cpId, source } = await findControlPlanId(page);
+  // A caller that just created the plan knows its id; otherwise read it off the saved page.
+  const { id: cpId, source } = options.cpId
+    ? { id: options.cpId, source: 'the plan just created' }
+    : await findControlPlanId(page);
   const issue = process.env.CP_ISSUE ?? options.issue ?? rows[0]['Issue'] ?? 'A0';
   if (!cpId) {
     throw new Error(
