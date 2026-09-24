@@ -10,8 +10,7 @@ import type { AutomationProgressEvent, ParsedWorkbook } from '../types.js';
 // Runs a Playwright Test spec (tests/login.spec.ts) as the app's automation job and streams its output
 // to the UI. The spec can read the edited workbook from the JSON file named in WORKBOOK_DATA_PATH.
 
-// Override with the PLAYWRIGHT_SPEC environment variable to run a different spec.
-const SPEC_FILE = process.env.PLAYWRIGHT_SPEC || 'tests/login.spec.ts';
+const DEFAULT_SPEC = 'tests/login.spec.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Same result from backend/src/playwright (tsx) and backend/dist/playwright (node).
@@ -55,6 +54,8 @@ export async function runPlaywrightSpec(
   emit({ type: 'status', step: 'CP Grid data loaded', message: `Loaded ${sheetRowCount(payload, 'grid')} rows from CP Grid.` });
   // Say where the SAP credentials come from, so a missing or misplaced .env is obvious in the run panel.
   const fromFile = envFileValues();
+  // Which spec to run: the environment first, then backend/.env, else the default.
+  const SPEC_FILE = process.env.PLAYWRIGHT_SPEC || fromFile.PLAYWRIGHT_SPEC || DEFAULT_SPEC;
   const specEnv: NodeJS.ProcessEnv = { ...fromFile, ...process.env, WORKBOOK_DATA_PATH: dataPath, FORCE_COLOR: '0' };
   const missing = ['SAP_USER', 'SAP_PASSWORD'].filter((name) => !specEnv[name]);
   if (missing.length) {
