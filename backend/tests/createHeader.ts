@@ -7,7 +7,29 @@ import { fetchCsrfToken, ODATA_SERVICE, SAP_CLIENT } from './sapLogin';
 // real id (e.g. AFM1_D_2026_0406) and returns it.
 
 const CRLF = '\r\n';
-const NAME_MAX = 50; // the screen cuts the name at this length
+const NAME_MAX = 50; // SAP's limit for the plan name
+
+// The plan name has to fit NAME_MAX, so long words in the designation are shortened:
+// CP_MOB_ATA25_1322_D256-79839-002-00_INST.BRACKET 72X10 -> ..._INST.BCK 72X10
+// Add or change pairs here, or set CP_NAME_SHORTCUTS="BRACKET=BCK,SUPPORT=SUP" in backend/.env.
+const NAME_SHORTCUTS: Record<string, string> = { BRACKET: 'BCK' };
+
+function shortcutsFromEnv() {
+  const pairs = (process.env.CP_NAME_SHORTCUTS ?? '')
+    .split(',')
+    .map((entry) => entry.split('='))
+    .filter((parts): parts is [string, string] => parts.length === 2 && Boolean(parts[0].trim()));
+  return Object.fromEntries(pairs.map(([word, short]) => [word.trim(), short.trim()]));
+}
+
+export function planName(planNumber: string) {
+  const shortcuts = { ...NAME_SHORTCUTS, ...shortcutsFromEnv() };
+  let name = planNumber;
+  for (const [word, short] of Object.entries(shortcuts)) {
+    name = name.replace(new RegExp(word, 'gi'), short);
+  }
+  return name.slice(0, NAME_MAX);
+}
 
 // Fixed choices the screen makes. Override any of them through backend/.env if a plan needs other values.
 const DEFAULTS = {
@@ -38,7 +60,7 @@ export function headerBody(form: Record<string, string>, issue: string) {
     CPID: 'CP_ID', // placeholder: SAP assigns the real id
     Issue: issue,
     Status: (form['Status'] ?? 'In Progress').replace(/^in progress$/i, 'In progress'),
-    Name: planNumber.slice(0, NAME_MAX),
+    Name: planName(planNumber),
     Description: planNumber,
     TargetSystem: DEFAULTS.targetSystem,
     TargetSystemRFC: DEFAULTS.targetSystem,
