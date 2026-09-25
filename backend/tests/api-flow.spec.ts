@@ -24,11 +24,11 @@ test('create control plan via API', async ({ page }) => {
   // 1. Open the launchpad. The user signs in in that window; the automation waits for it.
   //    Set AUTO_LOGIN=1 in backend/.env to have SAP_USER / SAP_PASSWORD typed in instead.
   await page.goto('https://mylaunchpad.intra.corp/fiori#Shell-home');
-
+  await page.getByRole('link', { name: 'Login / Password' }).click();
   if (process.env.AUTO_LOGIN === '1') {
     const { user, password } = sapCredentials();
     console.log('LOGIN: signing in automatically (AUTO_LOGIN=1)');
-    await page.getByRole('link', { name: 'Login / Password' }).click();
+    //await page.getByRole('link', { name: 'Login / Password' }).click();
     await page.getByRole('textbox', { name: 'Username' }).fill(user);
     await page.getByRole('textbox', { name: 'Password' }).click();
     await page.getByRole('textbox', { name: 'Password' }).fill(password);
