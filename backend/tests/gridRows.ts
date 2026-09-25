@@ -257,5 +257,7 @@ export async function addGridRows(
   }
 
   console.log(`GRID: ${sent} sent, ${failed} failed.`);
+  // A failed row must fail the run; otherwise the panel would report success with rows missing.
+  if (failed) throw new Error(`${failed} grid row(s) were refused by SAP; see the GRID FAIL line above.`);
   return { sent, failed };
 }
