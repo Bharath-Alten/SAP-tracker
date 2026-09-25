@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(PORT=4101 npm run serve)"
-    ]
-  }
-}

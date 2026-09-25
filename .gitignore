@@ -22,7 +22,8 @@ backend/odata/
 .env.*
 !.env.example
 
-# Editor / OS
+# Editor / OS / assistant settings
+.claude/
 .vscode/
 .idea/
 .DS_Store

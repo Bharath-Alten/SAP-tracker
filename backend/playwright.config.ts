@@ -14,7 +14,9 @@ export default defineConfig({
     // The corporate HTTPS certificate is not in Node's trust store, so direct API
     // calls (page.request) fail with "self-signed certificate in certificate chain".
     ignoreHTTPSErrors: true,
-    viewport: { width: 1280, height: 800 },
+    // Open the SAP window maximised: null viewport = follow the real window size.
+    viewport: null,
+    launchOptions: { args: ['--start-maximized'] },
     actionTimeout: 0,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure'
