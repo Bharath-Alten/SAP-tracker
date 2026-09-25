@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { ODATA_SERVICE, SAP_CLIENT } from './sapLogin';
+import { fetchCsrfToken, ODATA_SERVICE, SAP_CLIENT } from './sapLogin';
 
 // Creates the control plan header with the same OData call the CP screen sends when Save is
 // pressed: POST ETCPHeaderInfoSet with CPID set to the placeholder "CP_ID". SAP generates the
@@ -93,18 +93,10 @@ function batchBody(header: Record<string, unknown>, token: string, boundary: str
   ].join(CRLF);
 }
 
-export async function csrfToken(page: Page) {
-  const response = await page.request.get(`${ODATA_SERVICE}/?sap-client=${SAP_CLIENT}`, {
-    headers: { 'X-CSRF-Token': 'Fetch', Accept: 'application/json' }
-  });
-  const token = response.headers()['x-csrf-token'];
-  if (!token) throw new Error(`Could not get a CSRF token from SAP (HTTP ${response.status()}). Is the login still valid?`);
-  return token;
-}
 
 /** Creates the plan and returns the id SAP generated. */
 export async function createHeader(page: Page, form: Record<string, string>, issue = 'A0') {
-  const token = await csrfToken(page);
+  const token = await fetchCsrfToken(page);
   const stamp = String(Date.now());
   const boundary = `batch_${stamp}`;
   const changeset = `changeset_${stamp}`;

@@ -26,12 +26,32 @@ export async function loginToSap(page: Page) {
   await page.waitForLoadState('load');
 }
 
+const SERVICE_ROOT = `${ODATA_SERVICE}/?sap-client=${SAP_CLIENT}`;
+
+/**
+ * Signing in at the launchpad is not enough for the OData service: it answers 401 until the
+ * browser itself has called it once and picked up the session cookies for that path.
+ */
+export async function warmUpService(page: Page) {
+  await page.goto(SERVICE_ROOT, { waitUntil: 'domcontentloaded' }).catch(() => undefined);
+  await page.waitForTimeout(1000);
+}
+
 /** Token SAP requires on every write (MERGE/POST). Reuses the browser's SSO session. */
 export async function fetchCsrfToken(page: Page) {
-  const response = await page.request.get(`${ODATA_SERVICE}/?sap-client=${SAP_CLIENT}`, {
-    headers: { 'X-CSRF-Token': 'Fetch', Accept: 'application/json' }
-  });
-  const token = response.headers()['x-csrf-token'];
-  if (!token) throw new Error(`No CSRF token returned (HTTP ${response.status()}). Is the service name correct?`);
-  return token;
+  let status = 0;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const response = await page.request.get(SERVICE_ROOT, {
+      headers: { 'X-CSRF-Token': 'Fetch', Accept: 'application/json' }
+    });
+    const token = response.headers()['x-csrf-token'];
+    if (token) return token;
+    status = response.status();
+    console.log(`LOGIN: no CSRF token yet (HTTP ${status}), opening the service in the browser and retrying (${attempt}/3)`);
+    await warmUpService(page);
+  }
+  throw new Error(
+    `SAP did not return a CSRF token (HTTP ${status}). The sign-on may not have completed, ` +
+    'or this user has no access to Z_1N31_CP_SRV.'
+  );
 }

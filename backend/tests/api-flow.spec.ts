@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 
-import { sapCredentials } from './sapLogin';
+import { sapCredentials, warmUpService } from './sapLogin';
 import { getFormFields, getGridRows } from './workbookData';
 import { createHeader } from './createHeader';
 import { addGridRows } from './gridRows';
@@ -29,6 +29,14 @@ test('create control plan via API', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Password' }).fill(password);
   await page.getByRole('button', { name: 'Sign On   >' }).click();
   await page.waitForLoadState('load');
+
+  // Opening the CP tile first is what the working screen flow did; the OData service only
+  // accepts calls once the browser has been through it (otherwise it answers 401).
+  await page.getByRole('button', { name: 'CP Control Plan' }).click().catch(() => {
+    console.log('LOGIN: CP tile not found, continuing with the service call directly');
+  });
+  await page.waitForLoadState('networkidle').catch(() => undefined);
+  await warmUpService(page);
   console.log('LOGIN: signed in, switching to the OData service');
 
   // 2. The header, in one call instead of a screenful of fields.

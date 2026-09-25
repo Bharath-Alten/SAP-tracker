@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { ODATA_SERVICE, SAP_CLIENT } from './sapLogin';
+import { fetchCsrfToken, ODATA_SERVICE, SAP_CLIENT } from './sapLogin';
 
 // Sends CP Grid rows to SAP the same way the CP screen does: one $batch per row, holding a
 // changeset with (1) POST ETCPIRControlsSet with an EMPTY key and (2) MERGE on the plan header.
@@ -95,14 +95,6 @@ export async function findControlPlanId(page: Page) {
   return { id: '', source: 'nowhere' };
 }
 
-async function csrfToken(page: Page) {
-  const response = await page.request.get(`${ODATA_SERVICE}/?sap-client=${SAP_CLIENT}`, {
-    headers: { 'X-CSRF-Token': 'Fetch', Accept: 'application/json' }
-  });
-  const token = response.headers()['x-csrf-token'];
-  if (!token) throw new Error(`Could not get a CSRF token from SAP (HTTP ${response.status()}).`);
-  return token;
-}
 
 export function rowBody(row: Record<string, string>, unknownCodes: string[]) {
   const body: Record<string, unknown> = { ...EMPTY_ROW };
@@ -214,7 +206,7 @@ export async function addGridRows(
   console.log(`GRID: CPID='${cpId}' Issue='${issue}' (taken from ${source})`);
   console.log(`GRID: sending ${toSend.length} of ${rows.length} row(s)${all ? '' : ' (set GRID_ROWS=all for every row)'}`);
 
-  const token = await csrfToken(page);
+  const token = await fetchCsrfToken(page);
   const unknownCodes: string[] = [];
   let sent = 0;
   let failed = 0;
