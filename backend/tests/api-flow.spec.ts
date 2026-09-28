@@ -13,13 +13,14 @@ import { addGridRows } from './gridRows';
 // Remove it to go back to the screen-by-screen flow in login.spec.ts.
 
 test('create control plan via API', async ({ page }) => {
-  test.setTimeout(300_000);
-
   const form = getFormFields();
   const rows = getGridRows();
   const buildProcess = form['Build Process Number & Issue'] ?? '';
   const productNumber = buildProcess.replace(/\s*issue\b.*$/i, '').trim();
   const waitForUser = Number(process.env.LOGIN_WAIT_MS ?? 300_000);
+
+  // Waiting for the sign-in must not eat the time the rows need: allow 10 minutes on top.
+  test.setTimeout(waitForUser + 600_000);
 
   // 1. Open the launchpad. The user signs in in that window; the automation waits for it.
   //    Set AUTO_LOGIN=1 in backend/.env to have SAP_USER / SAP_PASSWORD typed in instead.
