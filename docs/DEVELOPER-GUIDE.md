@@ -126,6 +126,11 @@ The fastest route is the screen itself: open the CP app in Chrome, DevTools → 
 `$batch`, do the action by hand, then read the request payload. Both entity shapes in this
 project came from there.
 
+Opening the service root in a browser lists the entity sets it offers — `ETCPHeaderInfoSet`,
+`ETCPIRControlsSet` and the rest:
+
+![The CP service listing its entity sets](images/06-odata-service.png)
+
 `tests/odata-discovery.spec.ts` helps too: it logs in, downloads `$metadata`, reads one plan,
 and suggests a workbook-to-SAP mapping by comparing values. Run it with
 `npx playwright test tests/odata-discovery.spec.ts`; output lands in `backend/odata/`.

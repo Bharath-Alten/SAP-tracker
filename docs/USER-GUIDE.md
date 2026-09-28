@@ -23,13 +23,22 @@ Leave the terminal window open while you work. To stop the application, press `C
 ## 2. Import your workbook
 
 1. On the **Import** screen, drag your `.xlsx` control plan onto the box, or press **Choose a file**.
-2. The application reads the file and opens the **Data** screen.
+
+![The Import screen, waiting for a workbook](images/01-import.png)
+
+2. Pick the workbook and press **Open**.
+
+![Choosing the control-plan workbook](images/02-choose-file.png)
+
+3. The application reads the file and opens the **Data** screen.
 
 Only `.xlsx` files are accepted. If the file is refused, the message tells you why.
 
 ---
 
 ## 3. Check the data
+
+![The Header tab: the CP Front Page as a form](images/03-header-form.png)
 
 The **Header** tab shows the CP Front Page as a form, with the same sections as the workbook:
 
@@ -40,6 +49,8 @@ The **Header** tab shows the CP Front Page as a form, with the same sections as 
 The **Grid** tab shows the CP Grid sheet as a table. Click any cell to edit it. Edited cells are
 highlighted.
 
+![The Grid tab: every control row, editable](images/04-grid.png)
+
 **Save changes** writes your edits back to a workbook file on disk. It is optional: the
 automation uses what is on screen, saved or not.
 
@@ -49,7 +60,10 @@ automation uses what is on screen, saved or not.
 
 Press **Run automation** at the bottom right.
 
-1. A SAP browser window opens at the launchpad.
+1. A SAP browser window opens at the sign-on page.
+
+![The SAP sign-on page, where you type your own credentials](images/05-sap-sign-in.png)
+
 2. **Sign in yourself** in that window, with your own SAP user and password.
 3. As soon as you are signed in, the application takes over. Do not close that window.
 4. It creates the control plan and adds every grid row.
