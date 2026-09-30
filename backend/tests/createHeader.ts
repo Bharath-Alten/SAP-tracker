@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import { fetchCsrfToken, ODATA_SERVICE, SAP_CLIENT } from './sapLogin';
+import { fetchCsrfToken, ODATA_SERVICE, SAP_BASE, SAP_CLIENT } from './sapLogin';
 
 // Creates the control plan header with the same OData call the CP screen sends when Save is
 // pressed: POST ETCPHeaderInfoSet with CPID set to the placeholder "CP_ID". SAP generates the
@@ -117,13 +117,15 @@ function batchBody(header: Record<string, unknown>, token: string, boundary: str
 
 
 /**
- * Looks for a plan already in SAP with this name and issue. Returns its id, or an empty
- * string when there is none (or when the service will not answer the query).
+ * Looks for a plan already in SAP with this name. The CP service cannot list plans
+ * (ETCPHeaderInfoSet answers 501), but the My Activities service can: ETMyActivitySet
+ * filters on CPName and carries the plan number in ControlPlanID.
  */
 export async function findPlanByName(page: Page, name: string, issue: string) {
-  const filter = encodeURIComponent(`Name eq '${name.replace(/'/g, "''")}' and Issue eq '${issue}'`);
+  const service = process.env.MY_ACTIVITY_SERVICE ?? `${SAP_BASE}/sap/opu/odata/sap/Z_1N31_MY_ACTVT_SRV`;
+  const filter = encodeURIComponent(`CPName eq '${name.replace(/'/g, "''")}'`);
   const response = await page.request.get(
-    `${ODATA_SERVICE}/ETCPHeaderInfoSet?sap-client=${SAP_CLIENT}&$filter=${filter}&$format=json`,
+    `${service}/ETMyActivitySet?sap-client=${SAP_CLIENT}&$filter=${filter}&$top=50&$format=json`,
     { headers: { Accept: 'application/json' } }
   );
 
@@ -132,11 +134,18 @@ export async function findPlanByName(page: Page, name: string, issue: string) {
     return '';
   }
 
-  const results = await response.json().then((body) => body?.d?.results ?? []).catch(() => []);
+  const results: Record<string, string>[] = await response.json()
+    .then((body) => body?.d?.results ?? [])
+    .catch(() => []);
   if (!results.length) return '';
 
-  // Several plans can share a name; the newest id is the one the user just worked on.
-  const ids: string[] = results.map((row: Record<string, string>) => row.CPID).filter(Boolean).sort();
+  // Keep the rows for this issue when the list reports one; several plans can share a name,
+  // in which case the newest number is the one the user is working on.
+  const forIssue = results.filter((row) => !row.Issue || row.Issue === issue);
+  const ids = (forIssue.length ? forIssue : results)
+    .map((row) => row.ControlPlanID)
+    .filter(Boolean)
+    .sort();
   if (ids.length > 1) console.log(`HEADER: ${ids.length} plans share this name (${ids.join(', ')}); using the newest.`);
   return ids[ids.length - 1] ?? '';
 }
