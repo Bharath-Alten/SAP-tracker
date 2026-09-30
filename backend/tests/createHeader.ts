@@ -183,6 +183,21 @@ export async function createHeader(page: Page, form: Record<string, string>, iss
   });
 
   const text = await response.text();
+
+  // SAP answers 201 even when it refused: the real verdict is in the sap-message header,
+  // e.g. "Duplicated control plan name ... in plant AFM1." with severity "error".
+  const sapMessage = text.match(/sap-message:\s*(\{.*?\})\s*$/m)?.[1];
+  if (sapMessage && /"severity"\s*:\s*"error"/.test(sapMessage)) {
+    const reason = sapMessage.match(/"message"\s*:\s*"([^"]+)"/)?.[1] ?? sapMessage;
+    if (/duplicat/i.test(reason)) {
+      throw new Error(
+        `${reason} The plan is already in SAP, but this service does not return its number. ` +
+        'Open it in SAP, then run again with CP_ID=<that plan number> in backend/.env to add the grid rows to it.'
+      );
+    }
+    throw new Error(`SAP refused the control plan: ${reason}`);
+  }
+
   const statuses = [...text.matchAll(/HTTP\/1\.1 (\d{3})/g)].map((match) => Number(match[1]));
   const failed = statuses.find((status) => status >= 400);
   if (!response.ok() || failed) {
