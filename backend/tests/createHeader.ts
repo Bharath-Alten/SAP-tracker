@@ -39,7 +39,7 @@ const DEFAULTS = {
   plant: process.env.CP_PLANT ?? 'AFM1',
   program: process.env.CP_PROGRAM ?? 'D', // A320_Family_CEO/NEO
   mft: process.env.CP_MFT ?? 'A320 FAL MOB [MINOR]',
-  effectivity: process.env.CP_EFFECTIVITY ?? 'Effectively'
+  effectivity: process.env.CP_EFFECTIVITY ?? '' // the client wants this left empty
 };
 
 const pad = (value: number) => String(value).padStart(2, '0');
