@@ -106,7 +106,9 @@ export function rowBody(row: Record<string, string>, unknownCodes: string[]) {
   for (const [field, { column, codes }] of Object.entries(CODES)) {
     const text = value(column);
     if (!text) continue;
-    const code = codes[text];
+    // Workbooks vary in case ("Basic" / "basic"), so match the code list loosely.
+    const match = Object.keys(codes).find((key) => key.toLowerCase() === text.toLowerCase());
+    const code = match ? codes[match] : undefined;
     if (code) body[field] = code;
     else {
       body[field] = text;
@@ -261,13 +263,19 @@ export async function addGridRows(
       data: body
     });
 
-    const outcome = batchOutcome(await response.text());
+    const answer = await response.text();
+    const outcome = batchOutcome(answer);
     if (response.ok() && outcome.ok) {
       sent += 1;
       console.log(`GRID OK   ${label}`);
     } else {
       failed += 1;
-      console.log(`GRID FAIL ${label} -> ${outcome.detail}`);
+      // When SAP answers outside the batch format (403, a logon page, ...) there is no inner
+      // message, so fall back to the status and the start of whatever came back.
+      const reason = outcome.ok
+        ? `HTTP ${response.status()} ${response.statusText()}: ${answer.replace(/\s+/g, ' ').slice(0, 300) || '(empty response)'}`
+        : outcome.detail;
+      console.log(`GRID FAIL ${label} -> ${reason}`);
       break;
     }
   }
