@@ -60,11 +60,17 @@ test('find a searchable plan list', async ({ page }) => {
       }
       const first = await probe.json().then((body) => body?.d?.results?.[0] ?? body?.d ?? {}).catch(() => ({}));
       const fields = Object.keys(first).filter((key) => key !== '__metadata');
-      const nameField = fields.find((key) => /^(Name|CPName|PlanName|Description)$/i.test(key));
-      const idField = fields.find((key) => /^(CPID|PlanID|ControlPlanID)$/i.test(key));
+      // My Activities filters on CPName (seen in its filter bar), so try that name first.
+      const nameField = ['CPName', 'Name', 'PlanName', 'ControlPlanName', 'Description']
+        .find((key) => fields.some((field) => field.toLowerCase() === key.toLowerCase()));
+      const idField = ['CPID', 'CPNumber', 'PlanID', 'ControlPlanID']
+        .find((key) => fields.some((field) => field.toLowerCase() === key.toLowerCase()));
       console.log(`FIND: ${set} — readable, ${fields.length} field(s)${idField ? `, id: ${idField}` : ''}${nameField ? `, name: ${nameField}` : ''}`);
 
-      if (!nameField || !idField) continue;
+      if (!nameField) {
+        console.log(`FIND:   no name-like field here (${fields.slice(0, 12).join(', ')}${fields.length > 12 ? ', ...' : ''})`);
+        continue;
+      }
 
       const filter = encodeURIComponent(`${nameField} eq '${wanted.replace(/'/g, "''")}'`);
       const search = await page.request.get(`${service}/${set}?sap-client=${SAP_CLIENT}&$filter=${filter}&$top=5&$format=json`, {
@@ -75,8 +81,10 @@ test('find a searchable plan list', async ({ page }) => {
         continue;
       }
       const rows = await search.json().then((body) => body?.d?.results ?? []).catch(() => []);
+      const describe = (row: Record<string, string>) =>
+        `${idField ? row[idField] : JSON.stringify(row).slice(0, 80)} (${row.Issue ?? '?'})`;
       console.log(`FIND:   >>> ${set} answers a ${nameField} filter: ${rows.length} match(es)` +
-        (rows.length ? ` -> ${rows.map((row: Record<string, string>) => `${row[idField]} (${row.Issue ?? '?'})`).join(', ')}` : ''));
+        (rows.length ? ` -> ${rows.map(describe).join(', ')}` : ''));
     }
   }
 
