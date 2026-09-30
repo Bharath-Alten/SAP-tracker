@@ -116,6 +116,52 @@ function batchBody(header: Record<string, unknown>, token: string, boundary: str
 }
 
 
+/**
+ * Looks for a plan already in SAP with this name and issue. Returns its id, or an empty
+ * string when there is none (or when the service will not answer the query).
+ */
+export async function findPlanByName(page: Page, name: string, issue: string) {
+  const filter = encodeURIComponent(`Name eq '${name.replace(/'/g, "''")}' and Issue eq '${issue}'`);
+  const response = await page.request.get(
+    `${ODATA_SERVICE}/ETCPHeaderInfoSet?sap-client=${SAP_CLIENT}&$filter=${filter}&$format=json`,
+    { headers: { Accept: 'application/json' } }
+  );
+
+  if (!response.ok()) {
+    console.log(`HEADER: could not search for an existing plan (HTTP ${response.status()}); treating it as new.`);
+    return '';
+  }
+
+  const results = await response.json().then((body) => body?.d?.results ?? []).catch(() => []);
+  if (!results.length) return '';
+
+  // Several plans can share a name; the newest id is the one the user just worked on.
+  const ids: string[] = results.map((row: Record<string, string>) => row.CPID).filter(Boolean).sort();
+  if (ids.length > 1) console.log(`HEADER: ${ids.length} plans share this name (${ids.join(', ')}); using the newest.`);
+  return ids[ids.length - 1] ?? '';
+}
+
+/**
+ * Uses the plan that already exists for this workbook, or creates it. Either way the grid rows
+ * that follow go into the same plan.
+ */
+export async function ensurePlan(page: Page, form: Record<string, string>, issue = 'A0') {
+  if (process.env.CP_ID) {
+    console.log(`HEADER: using ${process.env.CP_ID} / ${issue} (from the CP_ID setting)`);
+    return { cpId: process.env.CP_ID, issue, created: false };
+  }
+
+  const name = planName(form['Control Plan Number'] ?? '');
+  const existing = await findPlanByName(page, name, issue);
+  if (existing) {
+    console.log(`HEADER: "${name}" already exists as ${existing} / ${issue} — keeping it, adding the grid rows.`);
+    return { cpId: existing, issue, created: false };
+  }
+
+  const created = await createHeader(page, form, issue);
+  return { cpId: created.cpId, issue: created.issue, created: true };
+}
+
 /** Creates the plan and returns the id SAP generated. */
 export async function createHeader(page: Page, form: Record<string, string>, issue = 'A0') {
   const token = await fetchCsrfToken(page);

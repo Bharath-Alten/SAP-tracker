@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 
 import { sapCredentials, warmUpService } from './sapLogin';
 import { getFormFields, getGridRows } from './workbookData';
-import { createHeader } from './createHeader';
+import { ensurePlan } from './createHeader';
 import { addGridRows } from './gridRows';
 
 // Sign in through the browser (SSO needs it), then do everything else through SAP's own
@@ -50,11 +50,11 @@ test('create control plan via API', async ({ page }) => {
   await warmUpService(page);
   console.log('LOGIN: switching to the OData service');
 
-  // 2. The header, in one call instead of a screenful of fields.
-  const { cpId, issue } = await createHeader(page, form, form['Issue'] || 'A0');
+  // 2. The plan: reused when SAP already has one with this name, created otherwise.
+  const { cpId, issue, created } = await ensurePlan(page, form, form['Issue'] || 'A0');
 
   // 3. The grid rows, into the plan SAP just created.
   await addGridRows(page, rows, { product: productNumber, issue, cpId });
 
-  console.log(`DONE: control plan ${cpId} / ${issue}`);
+  console.log(`DONE: control plan ${cpId} / ${issue} (${created ? 'created' : 'already existed'})`);
 });

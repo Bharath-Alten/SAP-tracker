@@ -177,6 +177,21 @@ function batchOutcome(text: string) {
   return { ok: false, detail: `HTTP ${failedStatus}: ${message}` };
 }
 
+/** Control names already in the plan, so a second run does not duplicate them. */
+async function existingControlNames(page: Page, cpId: string, issue: string) {
+  const filter = encodeURIComponent(`CPID eq '${cpId}' and Issue eq '${issue}'`);
+  const response = await page.request.get(
+    `${ODATA_SERVICE}/ETCPIRControlsSet?sap-client=${SAP_CLIENT}&$filter=${filter}&$select=Name&$top=5000&$format=json`,
+    { headers: { Accept: 'application/json' } }
+  );
+  if (!response.ok()) {
+    console.log(`GRID: could not read the plan's rows (HTTP ${response.status()}); sending every row.`);
+    return new Set<string>();
+  }
+  const results = await response.json().then((body) => body?.d?.results ?? []).catch(() => []);
+  return new Set<string>(results.map((row: Record<string, string>) => (row.Name ?? '').trim()).filter(Boolean));
+}
+
 export type GridResult = { sent: number; failed: number };
 
 export async function addGridRows(
@@ -201,10 +216,27 @@ export async function addGridRows(
     );
   }
 
-  const all = process.env.GRID_ROWS === 'all';
-  const toSend = all ? rows : rows.slice(0, 1);
   console.log(`GRID: CPID='${cpId}' Issue='${issue}' (taken from ${source})`);
-  console.log(`GRID: sending ${toSend.length} of ${rows.length} row(s)${all ? '' : ' (set GRID_ROWS=all for every row)'}`);
+
+  // A plan that already holds a control keeps it: re-running must not double the rows.
+  // Set GRID_DUPLICATES=allow to send every row regardless.
+  let candidates = rows;
+  if (process.env.GRID_DUPLICATES !== 'allow') {
+    const already = await existingControlNames(page, cpId, issue);
+    if (already.size) {
+      candidates = rows.filter((row) => !already.has((row['Control name'] ?? '').trim()));
+      console.log(`GRID: the plan already holds ${already.size} control(s); ${rows.length - candidates.length} workbook row(s) are already there.`);
+    }
+  }
+
+  if (!candidates.length) {
+    console.log('GRID: every row of the workbook is already in the plan, nothing to add.');
+    return { sent: 0, failed: 0 };
+  }
+
+  const all = process.env.GRID_ROWS === 'all';
+  const toSend = all ? candidates : candidates.slice(0, 1);
+  console.log(`GRID: sending ${toSend.length} of ${candidates.length} row(s)${all ? '' : ' (set GRID_ROWS=all for every row)'}`);
 
   const token = await fetchCsrfToken(page);
   const unknownCodes: string[] = [];
