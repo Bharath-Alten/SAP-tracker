@@ -334,6 +334,7 @@ export async function addGridRows(
   // Rows travel in groups: fewer round trips, and each row still answers for itself.
   const groupSize = Math.max(1, Number(process.env.GRID_BATCH_SIZE ?? 10));
   const refusals: { label: string; reason: string }[] = [];
+  const alreadyThere: string[] = [];
   let sent = 0;
 
   for (let start = 0; start < toSend.length; start += groupSize) {
@@ -370,6 +371,11 @@ export async function addGridRows(
       if (outcome.ok) {
         sent += 1;
         console.log(`GRID OK   ${label}`);
+      } else if (/duplicat/i.test(outcome.detail)) {
+        // SAP keeps control names unique per plant. The control is already there, which is
+        // the same situation as a plan that already exists: keep it and carry on.
+        alreadyThere.push(label);
+        console.log(`GRID SKIP ${label} -> already in plant ${process.env.CP_PLANT ?? 'AFM1'}, left as it is`);
       } else {
         // Carry on with the rest: one refused row must not cost the other rows.
         refusals.push({ label, reason: outcome.detail });
@@ -396,7 +402,9 @@ export async function addGridRows(
     console.log(`GRID: could not read the rows back -> HTTP ${check.status()}`);
   }
 
-  console.log(`GRID: ${sent} added, ${failed} refused, out of ${toSend.length} row(s) sent.`);
+  console.log(
+    `GRID: ${sent} added, ${alreadyThere.length} already there, ${failed} refused, out of ${toSend.length} row(s) sent.`
+  );
 
   if (failed) {
     // Group the refusals: thirteen rows usually share one reason, and that reason is the fix.
