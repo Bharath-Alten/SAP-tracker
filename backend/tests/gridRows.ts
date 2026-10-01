@@ -168,6 +168,68 @@ export function batchBody(row: Record<string, unknown>, cpId: string, issue: str
   ].join(CRLF);
 }
 
+// One $batch carrying several rows: each row gets its own changeset, so SAP accepts or
+// refuses them independently - one bad row no longer takes the others down with it.
+function batchBodyForRows(rows: Record<string, unknown>[], cpId: string, issue: string, token: string, boundary: string) {
+  const headerUri = `${ODATA_SERVICE}/ETCPHeaderInfoSet(CPID='${cpId}',Issue='${issue}')`;
+  const headerJson = JSON.stringify({
+    __metadata: { uri: headerUri, type: 'Z_1N31_CP_SRV.ETCPHeaderInfo' },
+    Mode: 'U'
+  });
+  const common = [
+    'sap-contextid-accept: header',
+    'Accept: application/json',
+    'Accept-Language: en',
+    'DataServiceVersion: 2.0',
+    'MaxDataServiceVersion: 2.0',
+    `x-csrf-token: ${token}`,
+    'Content-Type: application/json'
+  ];
+
+  const lines: string[] = [];
+  rows.forEach((row, index) => {
+    const changeset = `changeset_${index}_${Date.now()}`;
+    const rowJson = JSON.stringify(row);
+    lines.push(
+      `--${boundary}`,
+      `Content-Type: multipart/mixed; boundary=${changeset}`,
+      '',
+      `--${changeset}`,
+      'Content-Type: application/http',
+      'Content-Transfer-Encoding: binary',
+      '',
+      `POST ETCPIRControlsSet?sap-client=${SAP_CLIENT} HTTP/1.1`,
+      ...common,
+      `Content-Length: ${Buffer.byteLength(rowJson)}`,
+      '',
+      rowJson,
+      `--${changeset}`,
+      'Content-Type: application/http',
+      'Content-Transfer-Encoding: binary',
+      '',
+      `MERGE ETCPHeaderInfoSet(CPID='${cpId}',Issue='${issue}')?sap-client=${SAP_CLIENT} HTTP/1.1`,
+      ...common,
+      `Content-Length: ${Buffer.byteLength(headerJson)}`,
+      '',
+      headerJson,
+      `--${changeset}--`,
+      ''
+    );
+  });
+  lines.push(`--${boundary}--`, '');
+  return lines.join(CRLF);
+}
+
+/** The response parts, one per changeset, in the order they were sent. */
+function splitBatchParts(text: string, contentType?: string) {
+  const boundary = contentType?.match(/boundary=([^;]+)/)?.[1]?.trim().replace(/^"|"$/g, '');
+  if (!boundary) return [text];
+  return text
+    .split(`--${boundary}`)
+    .slice(1)
+    .filter((part) => part.trim() && part.trim() !== '--');
+}
+
 // A $batch always answers 202; the real outcome is in the parts.
 function batchOutcome(text: string) {
   // SAP can answer 201 Created and still refuse the row: the verdict is then in a
@@ -250,17 +312,34 @@ export async function addGridRows(
   const toSend = all ? candidates : candidates.slice(0, 1);
   console.log(`GRID: sending ${toSend.length} of ${candidates.length} row(s)${all ? '' : ' (set GRID_ROWS=all for every row)'}`);
 
+  // The workbook template changes over time: a renamed column would silently stop filling its
+  // SAP field, and a new column would go unnoticed. Say so once, before anything is sent.
+  const columnsInFile = new Set(Object.keys(rows[0] ?? {}));
+  const columnsUsed = new Set([
+    ...Object.values(GRID_MAP),
+    ...Object.values(CODES).map((entry) => entry.column),
+    'Control name',
+    'Control ID',
+    'Issue',
+    'Control plan ID'
+  ]);
+  const missing = [...columnsUsed].filter((column) => !columnsInFile.has(column));
+  const extra = [...columnsInFile].filter((column) => !columnsUsed.has(column) && !/^C\d+$/.test(column));
+  if (missing.length) console.log(`GRID COLUMNS: not in this workbook, so left empty in SAP: ${missing.join(', ')}`);
+  if (extra.length) console.log(`GRID COLUMNS: in the workbook but not sent to SAP: ${extra.join(', ')}`);
+
   const token = await fetchCsrfToken(page);
   const unknownCodes: string[] = [];
-  let sent = 0;
-  let failed = 0;
 
-  for (const [index, row] of toSend.entries()) {
-    const label = `row ${index + 1}/${toSend.length} (${row['Control name'] || row['Control ID'] || 'unnamed'})`;
-    const stamp = `${Date.now()}-${index}`;
-    const boundary = `batch_${stamp}`;
-    const changeset = `changeset_${stamp}`;
-    const body = batchBody(rowBody(row, unknownCodes), cpId, issue, token, boundary, changeset);
+  // Rows travel in groups: fewer round trips, and each row still answers for itself.
+  const groupSize = Math.max(1, Number(process.env.GRID_BATCH_SIZE ?? 10));
+  const refusals: { label: string; reason: string }[] = [];
+  let sent = 0;
+
+  for (let start = 0; start < toSend.length; start += groupSize) {
+    const group = toSend.slice(start, start + groupSize);
+    const boundary = `batch_${Date.now()}_${start}`;
+    const bodies = group.map((row) => rowBody(row, unknownCodes));
 
     const response = await page.request.post(`${ODATA_SERVICE}/$batch?sap-client=${SAP_CLIENT}`, {
       headers: {
@@ -270,25 +349,36 @@ export async function addGridRows(
         DataServiceVersion: '2.0',
         MaxDataServiceVersion: '2.0'
       },
-      data: body
+      data: batchBodyForRows(bodies, cpId, issue, token, boundary)
     });
 
     const answer = await response.text();
-    const outcome = batchOutcome(answer);
-    if (response.ok() && outcome.ok) {
-      sent += 1;
-      console.log(`GRID OK   ${label}`);
-    } else {
-      failed += 1;
-      // When SAP answers outside the batch format (403, a logon page, ...) there is no inner
-      // message, so fall back to the status and the start of whatever came back.
-      const reason = outcome.ok
-        ? `HTTP ${response.status()} ${response.statusText()}: ${answer.replace(/\s+/g, ' ').slice(0, 300) || '(empty response)'}`
-        : outcome.detail;
-      console.log(`GRID FAIL ${label} -> ${reason}`);
-      break;
-    }
+    const parts = splitBatchParts(answer, response.headers()['content-type']);
+
+    group.forEach((row, offset) => {
+      const label = `row ${start + offset + 1}/${toSend.length} (${row['Control name'] || row['Control ID'] || 'unnamed'})`;
+      const part = parts[offset];
+      const outcome = part
+        ? batchOutcome(part)
+        : {
+            ok: false,
+            detail: response.ok()
+              ? 'SAP sent no answer for this row.'
+              : `HTTP ${response.status()} ${response.statusText()}: ${answer.replace(/\s+/g, ' ').slice(0, 200) || '(empty response)'}`
+          };
+
+      if (outcome.ok) {
+        sent += 1;
+        console.log(`GRID OK   ${label}`);
+      } else {
+        // Carry on with the rest: one refused row must not cost the other rows.
+        refusals.push({ label, reason: outcome.detail });
+        console.log(`GRID FAIL ${label} -> ${outcome.detail}`);
+      }
+    });
   }
+
+  const failed = refusals.length;
 
   for (const note of [...new Set(unknownCodes)]) console.log(`GRID NOTE ${note}`);
 
@@ -306,8 +396,23 @@ export async function addGridRows(
     console.log(`GRID: could not read the rows back -> HTTP ${check.status()}`);
   }
 
-  console.log(`GRID: ${sent} sent, ${failed} failed.`);
-  // A failed row must fail the run; otherwise the panel would report success with rows missing.
-  if (failed) throw new Error(`${failed} grid row(s) were refused by SAP; see the GRID FAIL line above.`);
+  console.log(`GRID: ${sent} added, ${failed} refused, out of ${toSend.length} row(s) sent.`);
+
+  if (failed) {
+    // Group the refusals: thirteen rows usually share one reason, and that reason is the fix.
+    const byReason = new Map<string, string[]>();
+    for (const { label, reason } of refusals) {
+      // "Duplicated control name X in plant AFM1" -> one group, not one per control name.
+      const key = reason.replace(/name\s+\S+/i, 'name <name>');
+      byReason.set(key, [...(byReason.get(key) ?? []), label]);
+    }
+    for (const [reason, labels] of byReason) {
+      console.log(`GRID REASON (${labels.length} row(s)): ${reason}`);
+      console.log(`GRID        ${labels.slice(0, 5).join(', ')}${labels.length > 5 ? `, +${labels.length - 5} more` : ''}`);
+    }
+    const summary = [...byReason.keys()][0] ?? 'see the GRID FAIL lines above';
+    throw new Error(`${failed} of ${toSend.length} grid row(s) refused by SAP (${sent} added). First reason: ${summary}`);
+  }
+
   return { sent, failed };
 }
