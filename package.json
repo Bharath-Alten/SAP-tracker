@@ -12,7 +12,8 @@
     "dev": "concurrently \"npm run dev --workspace backend\" \"npm run dev --workspace frontend\"",
     "build": "npm run build --workspace frontend && npm run build --workspace backend",
     "setup:browsers": "playwright install chromium",
-    "test": "npm run test:playwright --workspace backend"
+    "test": "npm run test:playwright --workspace backend",
+    "find:codes": "npm run find:codes --workspace backend"
   },
   "devDependencies": {
     "concurrently": "^9.0.1"

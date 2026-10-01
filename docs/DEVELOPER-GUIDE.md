@@ -22,6 +22,7 @@ npm start                # builds everything, serves the app, opens the browser
 | `npm run build` | Build frontend (`frontend/dist`) and backend (`backend/dist`) |
 | `npm run dev` | Hot reload: Vite on 5173, API on 4000 |
 | `npm test` | Run the Playwright specs from the terminal |
+| `npm run find:codes` | Ask SAP which codes a dropdown accepts (read-only) |
 
 Node 18+ required (developed on 24).
 
@@ -143,9 +144,13 @@ accepts. Run it whenever the panel prints `GRID NOTE … no code known for "…"
 pairs it lists into `CODES`:
 
 ```bash
-npx playwright test tests/find-codes.spec.ts        # all code lists
-set CODE_LIST=ACTR && npx playwright test tests/find-codes.spec.ts   # just one
+npm run find:codes                 # from anywhere in the project
+set CODE_LIST=ACTR && npm run find:codes            # just one list
 ```
+
+Playwright finds a spec only next to its own config, so the bare
+`npx playwright test tests/find-codes.spec.ts` works in `backend/` but answers *No tests found*
+at the project root. The npm script above works in both.
 
 `tests/odata-discovery.spec.ts` helps too: it logs in, downloads `$metadata`, reads one plan,
 and suggests a workbook-to-SAP mapping by comparing values. Run it with
