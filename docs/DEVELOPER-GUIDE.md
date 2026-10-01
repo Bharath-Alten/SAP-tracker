@@ -74,6 +74,7 @@ real environment variables win over it.
 |---|---|
 | `PLAYWRIGHT_SPEC` | Which spec Run automation executes, e.g. `tests/api-flow.spec.ts` |
 | `GRID_ROWS` | `all` sends every grid row; otherwise only the first (safe default) |
+| `GRID_BATCH_SIZE` | Rows per `$batch` request; **1** (default) is the only value SAP has accepted — see below |
 | `AUTO_LOGIN` | `1` types `SAP_USER` / `SAP_PASSWORD` instead of waiting for the user |
 | `SAP_USER`, `SAP_PASSWORD` | Only needed with `AUTO_LOGIN=1` |
 | `LOGIN_WAIT_MS` | How long to wait for a manual sign-in (default 300000) |
@@ -94,6 +95,12 @@ Service: `Z_1N31_CP_SRV` (OData V2), client 001.
 | Create the plan | `POST ETCPHeaderInfoSet` with `CPID: "CP_ID"` — the placeholder; SAP returns the real id |
 | Add a grid row | `POST ETCPIRControlsSet` with **empty** `CPID`/`Issue`, inside a `$batch` changeset together with `MERGE ETCPHeaderInfoSet(CPID=…,Issue=…)` `{"Mode":"U"}` |
 | Read rows back | `GET ETCPIRControlsSet?$filter=CPID eq '…' and Issue eq '…'&$inlinecount=allpages` |
+
+**One row per request.** Several changesets in one `$batch` looked like a free speed-up, but
+SAP honoured only the first: rows 11, 21, 31 and 41 of a 43-row workbook were created and the
+other 29 came back `HTTP 500 /IWFND/CM_BEC/029 RFC Error`. `GRID_BATCH_SIZE` therefore defaults
+to 1. Each part now carries a `Content-ID`, which is what OData asks for, so a larger size is
+worth retrying — one run with `GRID_BATCH_SIZE=5` on a throw-away plan says whether it works.
 
 **The changeset is what attaches a row to a plan.** A plain `POST` with `CPID` filled in returns
 201 and the row never appears in the plan. This was learned from the screen's own network
@@ -130,6 +137,15 @@ Opening the service root in a browser lists the entity sets it offers — `ETCPH
 `ETCPIRControlsSet` and the rest:
 
 ![The CP service listing its entity sets](images/06-odata-service.png)
+
+`tests/find-codes.spec.ts` answers the other recurring question — which codes a dropdown
+accepts. Run it whenever the panel prints `GRID NOTE … no code known for "…"`, then copy the
+pairs it lists into `CODES`:
+
+```bash
+npx playwright test tests/find-codes.spec.ts        # all code lists
+set CODE_LIST=ACTR && npx playwright test tests/find-codes.spec.ts   # just one
+```
 
 `tests/odata-discovery.spec.ts` helps too: it logs in, downloads `$metadata`, reads one plan,
 and suggests a workbook-to-SAP mapping by comparing values. Run it with

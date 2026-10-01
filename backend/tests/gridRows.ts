@@ -197,6 +197,7 @@ function batchBodyForRows(rows: Record<string, unknown>[], cpId: string, issue: 
       `--${changeset}`,
       'Content-Type: application/http',
       'Content-Transfer-Encoding: binary',
+      `Content-ID: ${index * 2 + 1}`,
       '',
       `POST ETCPIRControlsSet?sap-client=${SAP_CLIENT} HTTP/1.1`,
       ...common,
@@ -206,6 +207,7 @@ function batchBodyForRows(rows: Record<string, unknown>[], cpId: string, issue: 
       `--${changeset}`,
       'Content-Type: application/http',
       'Content-Transfer-Encoding: binary',
+      `Content-ID: ${index * 2 + 2}`,
       '',
       `MERGE ETCPHeaderInfoSet(CPID='${cpId}',Issue='${issue}')?sap-client=${SAP_CLIENT} HTTP/1.1`,
       ...common,
@@ -247,7 +249,7 @@ function batchOutcome(text: string) {
   if (!failedStatus) return { ok: true, detail: statuses.join(', ') };
   const message = text.match(/"message"\s*:\s*\{[^}]*"value"\s*:\s*"([^"]+)"/)?.[1]
     ?? text.match(/<message[^>]*>([^<]+)</)?.[1]
-    ?? text.replace(/\s+/g, ' ').slice(0, 400);
+    ?? text.replace(/\s+/g, ' ').slice(0, 800);
   return { ok: false, detail: `HTTP ${failedStatus}: ${message}` };
 }
 
@@ -332,7 +334,9 @@ export async function addGridRows(
   const unknownCodes: string[] = [];
 
   // Rows travel in groups: fewer round trips, and each row still answers for itself.
-  const groupSize = Math.max(1, Number(process.env.GRID_BATCH_SIZE ?? 10));
+  // One row per request by default. SAP accepted only the first changeset when several
+  // travelled together (the rest came back 500), so grouping stays opt-in: GRID_BATCH_SIZE.
+  const groupSize = Math.max(1, Number(process.env.GRID_BATCH_SIZE ?? 1));
   const refusals: { label: string; reason: string }[] = [];
   const alreadyThere: string[] = [];
   let sent = 0;
@@ -365,7 +369,7 @@ export async function addGridRows(
             ok: false,
             detail: response.ok()
               ? 'SAP sent no answer for this row.'
-              : `HTTP ${response.status()} ${response.statusText()}: ${answer.replace(/\s+/g, ' ').slice(0, 200) || '(empty response)'}`
+              : `HTTP ${response.status()} ${response.statusText()}: ${answer.replace(/\s+/g, ' ').slice(0, 800) || '(empty response)'}`
           };
 
       if (outcome.ok) {
