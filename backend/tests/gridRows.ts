@@ -170,6 +170,16 @@ export function batchBody(row: Record<string, unknown>, cpId: string, issue: str
 
 // A $batch always answers 202; the real outcome is in the parts.
 function batchOutcome(text: string) {
+  // SAP can answer 201 Created and still refuse the row: the verdict is then in a
+  // sap-message header with severity "error" (same trick as a duplicate plan name).
+  const sapMessage = [...text.matchAll(/sap-message:\s*(\{.*?\})\s*$/gm)]
+    .map((match) => match[1])
+    .find((raw) => /"severity"\s*:\s*"error"/.test(raw));
+  if (sapMessage) {
+    const reason = sapMessage.match(/"message"\s*:\s*"([^"]+)"/)?.[1] ?? sapMessage;
+    return { ok: false, detail: `SAP refused it: ${reason}` };
+  }
+
   const statuses = [...text.matchAll(/HTTP\/1\.1 (\d{3})/g)].map((match) => Number(match[1]));
   const failedStatus = statuses.find((status) => status >= 400);
   if (!failedStatus) return { ok: true, detail: statuses.join(', ') };
